@@ -1,0 +1,16 @@
+description: "Created using Ansible"
+
+cluster_name: "Cluster01"
+datastore: "Datastore"
+folder: "RabbitMQ"
+
+ubuntu_template: "ubuntu-16.04.template"
+rabbitmq_port: "8888"
+
+
+admin_user_password: "pass1"
+monitor_user_password: "pass2"
+read_user_password: "pass3"
+write_user_password: "pass4"
+#Just for the demo...Do not store password in ymal file .
+default_vhost: "ha_tasks"

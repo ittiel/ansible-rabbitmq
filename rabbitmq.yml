@@ -1,0 +1,131 @@
+---
+- hosts: rabbitmq
+  become: true
+  become_method: sudo
+
+  vars_files:
+    - rabbitmq-vars.yml
+
+  tasks:
+  - name: Update all packages
+    apt:
+      name: "*"
+      state: latest
+      update_cache: yes
+      force_apt_get: true
+
+  # - name: Verify Python is installed
+  #   apt: pkg=python-software-properties state=present
+
+
+  - name: Install RabbitMQ public key
+    apt_key:
+      url: https://dl.bintray.com/rabbitmq/Keys/rabbitmq-release-signing-key.asc
+      state: present
+
+  - name: Add RabbitMQ official repo
+    apt_repository:
+      repo: deb https://dl.bintray.com/rabbitmq/debian xenial main
+      state: present
+      filename: rabbitmq
+
+  - name: Install Erlang public key
+    apt_key:
+      url: http://binaries.erlang-solutions.com/debian/erlang_solutions.asc
+      state: present     
+
+  - name: Add Erlang offical repo
+    apt_repository:
+      repo: deb http://binaries.erlang-solutions.com/debian xenial contrib
+      state: present
+      filename: erlang
+
+
+
+  - name: Install RabbitMQ package
+    apt:
+      name: "{{ item }}"
+      update_cache: yes
+      install_recommends: yes
+      state: present
+    with_items:
+      - rabbitmq-server
+
+  - name: Enable RabbitMQ plugins
+    rabbitmq_plugin:
+      names: rabbitmq_management
+      state: enabled
+    notify:
+      - restart rabbitmq
+
+  - name: Create default vhost
+    rabbitmq_vhost:
+      name: "{{ default_vhost }}"
+      tracing: no
+      state: present
+
+
+  - name: Add RabbitMQ Admin user
+    rabbitmq_user:
+      user: administrator
+      password: "{{ admin_user_password }}"
+      tags: administrator,deploy
+      vhost: /
+      configure_priv: .*
+      read_priv: .*
+      write_priv: .*
+      state: present
+
+  - name: Add RabbitMQ Monitor user
+    rabbitmq_user:
+      user: monitor
+      password: "{{ monitor_user_password }}"
+      tags: monitor
+      vhost: /
+      configure_priv: .*
+      read_priv: .*
+      write_priv: .*
+      state: present
+
+  - name: Add RabbitMQ Reader user
+    rabbitmq_user:
+      user: reader
+      password: "{{ read_user_password }}"
+      vhost: /
+      configure_priv: .*
+      read_priv: .*
+      # write_priv: .*
+      state: present
+
+  - name: Add RabbitMQ Writer user
+    rabbitmq_user:
+      user: writer
+      password: "{{ write_user_password }}"
+      vhost: /
+      configure_priv: .*
+      # read_priv: .*
+      write_priv: .*
+      state: present
+
+  - name: Remove default user
+    rabbitmq_user:
+      user: guest
+      state: absent
+
+  - name: Manage the queues
+    rabbitmq_queue:
+      name: "ha_tasks"
+      vhost: "{{ default_vhost }}"
+      state: present
+      login_user: "administrator"
+      login_password: "{{ admin_user_password }}"
+      durable: true
+    ignore_errors: true
+
+  # Warning: syntax change between RabbitMQ versions. Default Ansible RabbitMQ module only support recent version of RabbitMQ
+  - name: Set default policy for HA to all queues/exchanges
+    rabbitmq_policy: vhost={{default_vhost}} name=ha_tasks pattern='.*' tags="ha-mode=all" priority=1
+    with_items: rabbitmq_vhosts
+  handlers:
+  - name: restart rabbitmq
+    service: name=rabbitmq-server state=restarted
